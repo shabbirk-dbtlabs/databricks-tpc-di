@@ -1,0 +1,214 @@
+version: 2
+
+models:
+  # ------------------------------------------------------------------------
+  # Silver layer: conformed dimensions and financials built from the FINWIRE
+  # feed and HR file. These are slowly-changing (type 2) where noted.
+  # ------------------------------------------------------------------------
+  - name: DimBroker
+    description: >
+      Broker dimension built from the HR file, filtered to employees whose
+      job code is 314 (brokers). Effective-dated to the first date in DimDate;
+      all rows are current in this benchmark.
+    columns:
+      - name: sk_brokerid
+        description: Surrogate key for the broker.
+        data_tests:
+          - not_null
+          - unique
+      - name: brokerid
+        description: Natural key (employee id) for the broker.
+        data_tests:
+          - not_null
+          - unique
+      - name: managerid
+        description: Employee id of the broker's manager.
+      - name: firstname
+        description: Broker first name.
+        data_tests:
+          - not_null
+      - name: lastname
+        description: Broker last name.
+        data_tests:
+          - not_null
+      - name: iscurrent
+        description: SCD2 current-row flag. Always true in this dataset.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true]
+                quote: false
+      - name: batchid
+        description: Batch in which the row was loaded.
+        data_tests:
+          - not_null
+      - name: effectivedate
+        description: SCD2 row effective (from) date.
+        data_tests:
+          - not_null
+      - name: enddate
+        description: SCD2 row end date; 9999-12-31 for current rows.
+        data_tests:
+          - not_null
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "effectivedate < enddate"
+
+  - name: DimCompany
+    description: >
+      Slowly-changing (type 2) company dimension parsed from FINWIRE `CMP`
+      records. Maps raw S&P ratings to an investment-grade flag and joins to
+      the Industry reference table.
+    columns:
+      - name: sk_companyid
+        description: Surrogate key combining the effective date and company id.
+        data_tests:
+          - not_null
+          - unique
+      - name: companyid
+        description: Natural key (CIK) of the company.
+        data_tests:
+          - not_null
+      - name: status
+        description: Resolved company status.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['Active', 'Completed', 'Canceled', 'Pending', 'Submitted', 'Inactive']
+      - name: name
+        description: Company name.
+        data_tests:
+          - not_null
+      - name: industry
+        description: Industry name resolved via the Industry reference table.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('Industry')
+                field: in_name
+      - name: sprating
+        description: S&P credit rating, or null when not a recognised rating.
+      - name: islowgrade
+        description: Boolean flag; true when the S&P rating is below investment grade.
+      - name: iscurrent
+        description: SCD2 current-row flag.
+        data_tests:
+          - not_null
+      - name: effectivedate
+        description: SCD2 row effective (from) date.
+        data_tests:
+          - not_null
+      - name: enddate
+        description: SCD2 row end date; 9999-12-31 for current rows.
+        data_tests:
+          - not_null
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "effectivedate < enddate"
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - companyid
+              - effectivedate
+
+  - name: DimSecurity
+    description: >
+      Slowly-changing (type 2) security dimension parsed from FINWIRE `SEC`
+      records, joined to the current DimCompany row by company name or CIK.
+    columns:
+      - name: sk_securityid
+        description: Surrogate key for the security version.
+        data_tests:
+          - not_null
+          - unique
+      - name: symbol
+        description: Ticker symbol.
+        data_tests:
+          - not_null
+      - name: status
+        description: Resolved security status.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Active', 'Completed', 'Canceled', 'Pending', 'Submitted', 'Inactive']
+      - name: sk_companyid
+        description: Foreign key to the issuing company in DimCompany.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('DimCompany')
+                field: sk_companyid
+      - name: sharesoutstanding
+        description: Number of shares outstanding.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: dividend
+        description: Per-share dividend.
+      - name: iscurrent
+        description: SCD2 current-row flag.
+        data_tests:
+          - not_null
+      - name: effectivedate
+        data_tests:
+          - not_null
+      - name: enddate
+        data_tests:
+          - not_null
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "effectivedate < enddate"
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - symbol
+              - effectivedate
+
+  - name: Financial
+    description: >
+      Quarterly company financials parsed from FINWIRE `FIN` records and
+      attached to the matching DimCompany version (by name or company id).
+    columns:
+      - name: sk_companyid
+        description: Foreign key to DimCompany.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('DimCompany')
+                field: sk_companyid
+      - name: fi_year
+        description: Fiscal year of the report.
+        data_tests:
+          - not_null
+      - name: fi_qtr
+        description: Fiscal quarter (1-4).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4]
+                quote: false
+      - name: fi_qtr_start_date
+        description: First day of the fiscal quarter.
+        data_tests:
+          - not_null
+      - name: fi_basic_eps
+        description: Basic earnings per share for the quarter.
+      - name: fi_revenue
+        description: Reported revenue for the quarter.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - sk_companyid
+              - fi_year
+              - fi_qtr

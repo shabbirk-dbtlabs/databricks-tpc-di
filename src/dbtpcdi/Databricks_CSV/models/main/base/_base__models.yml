@@ -1,0 +1,252 @@
+version: 2
+
+models:
+  # ------------------------------------------------------------------------
+  # Reference / lookup tables loaded directly from the Batch1 flat files.
+  # ------------------------------------------------------------------------
+  - name: TradeType
+    description: >
+      Reference table of the trade types supported by the brokerage
+      (market/limit buys and sells, stop loss). Loaded once from the Batch1
+      `TradeType.txt` flat file.
+    columns:
+      - name: tt_id
+        description: Primary key. Short code identifying the trade type (e.g. `TMB`).
+        data_tests:
+          - not_null
+          - unique
+          - accepted_values:
+              arguments:
+                values: ['TMB', 'TMS', 'TSL', 'TLS', 'TLB']
+      - name: tt_name
+        description: Human-readable trade type name (e.g. "Market Buy").
+        data_tests:
+          - not_null
+      - name: tt_is_sell
+        description: Flag (0/1) indicating whether the trade type is a sell.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: tt_is_mrkt
+        description: Flag (0/1) indicating whether the trade type is a market order.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+
+  - name: StatusType
+    description: >
+      Reference table mapping the status codes used across trades and
+      securities to their descriptions.
+    columns:
+      - name: st_id
+        description: Primary key. Status code (e.g. `ACTV`).
+        data_tests:
+          - not_null
+          - unique
+          - accepted_values:
+              arguments:
+                values: ['ACTV', 'CMPT', 'CNCL', 'PNDG', 'SBMT', 'INAC']
+      - name: st_name
+        description: Status description (e.g. "Active").
+        data_tests:
+          - not_null
+
+  - name: TaxRate
+    description: Reference table of local and national tax rates.
+    columns:
+      - name: tx_id
+        description: Primary key. Tax rate identifier.
+        data_tests:
+          - not_null
+          - unique
+      - name: tx_name
+        description: Description of the tax rate.
+        data_tests:
+          - not_null
+      - name: tx_rate
+        description: The tax rate expressed as a decimal fraction between 0 and 1.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: true
+
+  - name: Industry
+    description: Reference table of industry classifications used by DimCompany.
+    columns:
+      - name: in_id
+        description: Primary key. Industry identifier.
+        data_tests:
+          - not_null
+          - unique
+      - name: in_name
+        description: Industry name.
+        data_tests:
+          - not_null
+          - unique
+      - name: in_sc_id
+        description: Associated sector code.
+
+  - name: DimDate
+    description: >
+      Conformed date dimension loaded from the `Date.txt` flat file. The
+      surrogate key is the date in `yyyyMMdd` form and is referenced by every
+      fact table.
+    columns:
+      - name: sk_dateid
+        description: Surrogate key for the date in `yyyyMMdd` (BIGINT) form.
+        data_tests:
+          - not_null
+          - unique
+      - name: datevalue
+        description: The calendar date.
+        data_tests:
+          - not_null
+          - unique
+      - name: calendaryearid
+        description: The calendar year (e.g. 2005).
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1900
+                max_value: 2100
+      - name: dayofweeknum
+        description: Day of week as a number (1 = Monday ... 7 = Sunday).
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 7
+      - name: holidayflag
+        description: Boolean flag indicating whether the date is a holiday.
+        data_tests:
+          - not_null
+
+  - name: DimTime
+    description: >
+      Conformed time-of-day dimension at second grain loaded from the
+      `Time.txt` flat file.
+    columns:
+      - name: sk_timeid
+        description: Surrogate key for the time in `HHmmss` (BIGINT) form.
+        data_tests:
+          - not_null
+          - unique
+      - name: hourid
+        description: Hour of day (0-23).
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 23
+      - name: minuteid
+        description: Minute of hour (0-59).
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 59
+      - name: secondid
+        description: Second of minute (0-59).
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 59
+      - name: markethoursflag
+        description: Boolean flag indicating the time falls within market hours.
+        data_tests:
+          - not_null
+      - name: officehoursflag
+        description: Boolean flag indicating the time falls within office hours.
+        data_tests:
+          - not_null
+
+  - name: BatchDate
+    description: >
+      One row per batch giving the as-of date for each incremental load.
+      Batch 1 is the historical load; batches 2 and 3 are incremental.
+    columns:
+      - name: batchid
+        description: The batch number, derived from the source file path.
+        data_tests:
+          - not_null
+          - unique
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3]
+                quote: false
+      - name: batchdate
+        description: The effective date associated with the batch.
+        data_tests:
+          - not_null
+
+  - name: FinWire
+    description: >
+      Parsed FINWIRE feed. A single fixed-width source file holds company
+      (CMP), security (SEC) and financial (FIN) records; `rectype` is derived
+      so downstream silver models can fan out by record type. FIN records are
+      further classified into name- vs. company-id-keyed variants.
+    columns:
+      - name: rectype
+        description: Record type discriminator used to split the feed downstream.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['CMP', 'SEC', 'FIN_NAME', 'FIN_COMPANYID']
+      - name: recdate
+        description: The record's posting date.
+        data_tests:
+          - not_null
+      - name: value
+        description: The raw fixed-width payload, parsed by substring in the silver layer.
+        data_tests:
+          - not_null
+
+  - name: CustomerMgmt
+    description: >
+      Flattened customer-management event stream parsed from the Batch1
+      `CustomerMgmt.xml` file. Each row is an account/customer action (new,
+      update, close, inactivate) and feeds both DimCustomer and DimAccount.
+    columns:
+      - name: customerid
+        description: The natural key of the customer the action applies to.
+        data_tests:
+          - not_null
+      - name: accountid
+        description: The account the action applies to (null for customer-only actions).
+      - name: taxstatus
+        description: Account tax status code.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1, 2]
+                quote: false
+      - name: status
+        description: Resolved account/customer status after the action.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Active', 'Inactive']
+      - name: update_ts
+        description: Timestamp at which the action took effect.
+        data_tests:
+          - not_null
+      - name: ActionType
+        description: The raw action type from the source XML.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['NEW', 'ADDACCT', 'UPDACCT', 'UPDCUST', 'CLOSEACCT', 'INACT']

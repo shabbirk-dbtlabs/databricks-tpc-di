@@ -2,14 +2,14 @@ name: 'dbsql_dbt_tpcdi'
 version: '1.0.0'
 config-version: 2
 
-profile: 'sql_endpoints'
+profile: 'databricks_demo'
 
 vars:
   benchmark: tpcdi
-  scalefactor: 10000
+  scalefactor: 1000
   catalog: skhanbhai
-  schema: tpcdi_dbtcloud_sf10000
-  stagingschema: tpcdi_dbtcloud_sf10000_stage # often this is the schema above with "_stage" appended
+  schema: tpcdi_dbtcloud_sf1000
+  stagingschema: tpcdi_dbtcloud_sf1000_stage # often this is the schema above with "_stage" appended
   # stage: {ENTER_YOUR_SF_EXTERNAL_STAGE_LOCATION_HERE} #snowflake stage and raw files location path. Usually this is: EXTERNAL_STAGE/tpcdi/sf=10000
   rawfilelocation: /Volumes/skhanbhai/tpcdi_raw_data/tpcdi_volume #databricks external location path. Usually this is: /Volumes/main/tpcdi_raw_data/tpcdi_volume
 
@@ -17,12 +17,15 @@ model-paths: ["Databricks_CSV/models/"]
 
 target-path: "target"
 
+dbt-cloud:
+    project-id: 19872
+
 #dispatch:
 #  - macro_namespace: dbt_utils
 #    search_order: ['dbsql_dbt_tpcdi', 'dbt_utils']
 
-#models:
-#  +transient: false
+models:
+ +static_analysis: baseline
 
 # flags:
 #   use_materialization_v2: True
