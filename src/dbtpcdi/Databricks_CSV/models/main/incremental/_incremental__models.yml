@@ -16,68 +16,22 @@ models:
     columns:
       - name: sk_customerid
         description: Surrogate key combining effective date and customer id.
-        data_tests:
-          - not_null
-          - unique
       - name: customerid
         description: Natural key of the customer.
-        data_tests:
-          - not_null
       - name: status
         description: Resolved customer status.
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: ['Active', 'Completed', 'Canceled', 'Pending', 'Submitted', 'Inactive']
       - name: gender
         description: Normalised gender; non-M/F values are mapped to 'U'.
-        data_tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ['M', 'F', 'U']
       - name: tier
         description: Customer tier (1-3).
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: [1, 2, 3]
-                quote: false
       - name: nationaltaxrate
         description: National tax rate resolved from the TaxRate reference table.
-        data_tests:
-          - dbt_utils.accepted_range:
-              arguments:
-                min_value: 0
-                max_value: 1
-                inclusive: true
       - name: localtaxrate
         description: Local tax rate resolved from the TaxRate reference table.
-        data_tests:
-          - dbt_utils.accepted_range:
-              arguments:
-                min_value: 0
-                max_value: 1
-                inclusive: true
       - name: iscurrent
         description: SCD2 current-row flag.
-        data_tests:
-          - not_null
       - name: effectivedate
-        data_tests:
-          - not_null
       - name: enddate
-        data_tests:
-          - not_null
-    data_tests:
-      - dbt_utils.expression_is_true:
-          arguments:
-            expression: "effectivedate < enddate"
-      - dbt_utils.unique_combination_of_columns:
-          arguments:
-            combination_of_columns:
-              - customerid
-              - effectivedate
 
   - name: DimAccount
     description: >
@@ -87,59 +41,19 @@ models:
     columns:
       - name: sk_accountid
         description: Surrogate key combining effective date and account id.
-        data_tests:
-          - not_null
-          - unique
       - name: accountid
         description: Natural key of the account.
-        data_tests:
-          - not_null
       - name: sk_brokerid
         description: Foreign key to the managing broker.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimBroker')
-                field: sk_brokerid
       - name: sk_customerid
         description: Foreign key to the owning customer version.
-        data_tests:
-          - relationships:
-              arguments:
-                to: ref('DimCustomer')
-                field: sk_customerid
       - name: taxstatus
         description: Account tax status code.
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: [0, 1, 2]
-                quote: false
       - name: status
         description: Resolved account status.
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: ['Active', 'Completed', 'Canceled', 'Pending', 'Submitted', 'Inactive']
       - name: iscurrent
-        data_tests:
-          - not_null
       - name: effectivedate
-        data_tests:
-          - not_null
       - name: enddate
-        data_tests:
-          - not_null
-    data_tests:
-      - dbt_utils.expression_is_true:
-          arguments:
-            expression: "effectivedate < enddate"
-      - dbt_utils.unique_combination_of_columns:
-          arguments:
-            combination_of_columns:
-              - accountid
-              - effectivedate
 
   - name: DimTrade
     description: >
@@ -150,67 +64,23 @@ models:
     columns:
       - name: tradeid
         description: Natural key of the trade.
-        data_tests:
-          - not_null
-          - unique
       - name: status
         description: Resolved trade status.
-        data_tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ['Active', 'Completed', 'Canceled', 'Pending', 'Submitted', 'Inactive']
       - name: type
         description: Resolved trade type description.
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: ['Market Buy', 'Market Sell', 'Stop Loss', 'Limit Sell', 'Limit Buy']
       - name: cashflag
         description: Boolean flag indicating a cash (vs. margin) trade.
-        data_tests:
-          - not_null
       - name: sk_createdateid
         description: Foreign key to DimDate for the trade-create date.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimDate')
-                field: sk_dateid
       - name: sk_securityid
         description: Foreign key to the traded security version.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimSecurity')
-                field: sk_securityid
       - name: sk_accountid
         description: Foreign key to the trading account version.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimAccount')
-                field: sk_accountid
       - name: quantity
         description: Number of shares/units traded.
-        data_tests:
-          - dbt_utils.accepted_range:
-              arguments:
-                min_value: 0
-                inclusive: true
       - name: tradeprice
         description: Execution price per unit.
-        data_tests:
-          - dbt_utils.accepted_range:
-              arguments:
-                min_value: 0
-                inclusive: true
       - name: batchid
-        data_tests:
-          - not_null
 
   # --- Facts --------------------------------------------------------------
   - name: FactHoldings
@@ -221,50 +91,18 @@ models:
     columns:
       - name: tradeid
         description: The trade that originated the holding lot.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimTrade')
-                field: tradeid
       - name: currenttradeid
         description: The trade that produced this holding state.
-        data_tests:
-          - not_null
       - name: sk_customerid
         description: Foreign key to the holding's customer.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimCustomer')
-                field: sk_customerid
       - name: sk_securityid
         description: Foreign key to the held security.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimSecurity')
-                field: sk_securityid
       - name: sk_dateid
         description: Foreign key to DimDate (trade close date).
-        data_tests:
-          - relationships:
-              arguments:
-                to: ref('DimDate')
-                field: sk_dateid
       - name: currentprice
         description: Price of the originating trade.
-        data_tests:
-          - dbt_utils.accepted_range:
-              arguments:
-                min_value: 0
-                inclusive: true
       - name: currentholding
         description: Share quantity held after the event.
-        data_tests:
-          - not_null
 
   - name: FactCashBalances
     description: >
@@ -274,34 +112,12 @@ models:
     columns:
       - name: sk_customerid
         description: Foreign key to the customer.
-        data_tests:
-          - not_null
       - name: sk_accountid
         description: Foreign key to the account version.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimAccount')
-                field: sk_accountid
       - name: sk_dateid
         description: Foreign key to DimDate.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimDate')
-                field: sk_dateid
       - name: cash
         description: Running cash balance for the account as of the date.
-        data_tests:
-          - not_null
-    data_tests:
-      - dbt_utils.unique_combination_of_columns:
-          arguments:
-            combination_of_columns:
-              - sk_accountid
-              - sk_dateid
 
   - name: FactWatches
     description: >
@@ -310,42 +126,12 @@ models:
     columns:
       - name: sk_customerid
         description: Foreign key to the watching customer.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimCustomer')
-                field: sk_customerid
       - name: sk_securityid
         description: Foreign key to the watched security.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimSecurity')
-                field: sk_securityid
       - name: sk_dateid_dateplaced
         description: Foreign key to DimDate for the date the watch was placed.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimDate')
-                field: sk_dateid
       - name: sk_dateid_dateremoved
         description: Foreign key to DimDate for the date the watch was removed; null if still active.
-        data_tests:
-          - relationships:
-              arguments:
-                to: ref('DimDate')
-                field: sk_dateid
-    data_tests:
-      - dbt_utils.unique_combination_of_columns:
-          arguments:
-            combination_of_columns:
-              - sk_customerid
-              - sk_securityid
-              - sk_dateid_dateplaced
 
   - name: FactMarketHistory
     description: >
@@ -438,31 +224,12 @@ models:
     columns:
       - name: agencyid
         description: Marketing agency identifier for the prospect.
-        data_tests:
-          - not_null
       - name: sk_recorddateid
         description: Foreign key to DimDate for the record date.
-        data_tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('DimDate')
-                field: sk_dateid
       - name: sk_updatedateid
         description: Foreign key to DimDate for the original/update date.
-        data_tests:
-          - relationships:
-              arguments:
-                to: ref('DimDate')
-                field: sk_dateid
       - name: iscustomer
         description: True when the prospect matches a current DimCustomer record.
-        data_tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: [true, false]
-                quote: false
       - name: gender
         description: Prospect gender from the agency feed.
       - name: marketingnameplate

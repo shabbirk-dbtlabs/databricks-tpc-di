@@ -91,7 +91,6 @@ models:
         description: Industry name.
         data_tests:
           - not_null
-          - unique
       - name: in_sc_id
         description: Associated sector code.
 

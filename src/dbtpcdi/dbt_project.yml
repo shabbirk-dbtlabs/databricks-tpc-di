@@ -26,7 +26,6 @@ dbt-cloud:
 
 models:
  +static_analysis: baseline
- +on_error: continue
 
 # flags:
 #   use_materialization_v2: True

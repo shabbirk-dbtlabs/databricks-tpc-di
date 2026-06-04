@@ -34,6 +34,17 @@ log(){ echo "[$(ts)] $*" >> "$LOG"; }
 
 echo "==== user${USER_N} START $(date) cohort=${COHORT} target=${TARGET} tp=${TP} dur=${DURATION}s ====" > "$LOG"
 
+# Pre-flight: ensure CustomerMgmt exists in this user's schema. It is VERY slow to
+# build, so do it at most once per user, and only if it's actually missing.
+if timeout 90 dbt show --inline "select count(*) as n from {{ ref('CustomerMgmt') }}" --target "$TARGET" --target-path "$TP" >> "$LOG" 2>&1; then
+  log "preflight: CustomerMgmt already present"
+else
+  log "preflight: CustomerMgmt MISSING -> building once (slow)"
+  timeout 2400 dbt run --select CustomerMgmt --target "$TARGET" --target-path "$TP" >> "$LOG" 2>&1
+  rc=$?
+  log "preflight: CustomerMgmt build finished rc=${rc}"
+fi
+
 START=$(date +%s)
 i=0
 while [ $(( $(date +%s) - START )) -lt "$DURATION" ]; do
@@ -53,7 +64,7 @@ while [ $(( $(date +%s) - START )) -lt "$DURATION" ]; do
        log "iter $i: inline ad-hoc query on $M"
        timeout 120 dbt show --inline "$QRY" --target "$TARGET" --target-path "$TP" >> "$LOG" 2>&1 ;;
     3) log "iter $i: compile $M";             timeout 120 dbt compile --select "$M" --target "$TARGET" --target-path "$TP" >> "$LOG" 2>&1 ;;
-    4) log "iter $i: list ${M}+";             timeout 60  dbt list --select "${M}+" --target "$TARGET" --target-path "$TP" >> "$LOG" 2>&1 ;;
+    4) log "iter $i: run $M $S (multi-model)"; timeout 200 dbt run --select "$M" "$S" --target "$TARGET" --target-path "$TP" --exclude CustomerMgmt $SF >> "$LOG" 2>&1 ;;
     5) log "iter $i: test $S";                timeout 150 dbt test --select "$S" --target "$TARGET" --target-path "$TP" >> "$LOG" 2>&1 ;;
     6) log "iter $i: build $S";               timeout 200 dbt build --select "$S" --target "$TARGET" --target-path "$TP" --exclude CustomerMgmt $SF >> "$LOG" 2>&1 ;;
     7) # small safe edit to THIS user's own model, then rerun
